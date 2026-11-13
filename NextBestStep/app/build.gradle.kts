@@ -33,6 +33,8 @@ android {
         buildConfigField("String", "OPENAI_API_KEY", "\"${llmProp("API_KEY")}\"")
         buildConfigField("String", "OPENAI_MODEL", "\"${llmProp("MODEL", "gpt-4.1-mini")}\"")
         buildConfigField("String", "OPENAI_BASE_URL", "\"${llmProp("BASE_URL", "https://api.openai.com/v1")}\"")
+        // The one admin account's password. Debug builds fall back to the demo password when unset.
+        buildConfigField("String", "ADMIN_PASSWORD", "\"${localProp("ADMIN_PASSWORD").replace("\\", "\\\\").replace("\"", "\\\"")}\"")
     }
 
     buildTypes {

@@ -35,6 +35,12 @@ interface UserDao {
     @Query("SELECT * FROM users WHERE role = 'CASEWORKER' ORDER BY fullName")
     suspend fun caseworkers(): List<UserEntity>
 
+    @Query("DELETE FROM users WHERE id = :id")
+    suspend fun delete(id: Long)
+
+    @Query("SELECT * FROM users WHERE role = 'STUDENT' AND mentorId = :mentorId")
+    suspend fun studentsOf(mentorId: Long): List<UserEntity>
+
     @Query("SELECT COUNT(*) FROM users WHERE role = 'STUDENT' AND mentorId = :mentorId")
     suspend fun studentCount(mentorId: Long): Int
 
@@ -119,6 +125,9 @@ interface GoalDao {
     @Query("SELECT * FROM goals")
     fun observeAll(): Flow<List<GoalEntity>>
 
+    @Query("DELETE FROM goals WHERE studentId = :studentId")
+    suspend fun deleteForStudent(studentId: Long)
+
     @Query("UPDATE goals SET targetRoleId = NULL WHERE targetRoleId = :roleId")
     suspend fun clearRole(roleId: Long)
 }
@@ -139,6 +148,9 @@ interface FactDao {
 
     @Query("SELECT * FROM facts WHERE studentId = :studentId AND label = :label COLLATE NOCASE LIMIT 1")
     suspend fun byLabel(studentId: Long, label: String): FactEntity?
+
+    @Query("DELETE FROM facts WHERE studentId = :studentId")
+    suspend fun deleteForStudent(studentId: Long)
 }
 
 @Dao
@@ -199,6 +211,13 @@ interface HelpRequestDao {
 
     @Query("SELECT * FROM help_requests WHERE studentId = :studentId AND status != 'RESOLVED' ORDER BY createdAt DESC LIMIT 1")
     suspend fun openForStudent(studentId: Long): HelpRequestEntity?
+
+    @Query("DELETE FROM help_requests WHERE studentId = :studentId")
+    suspend fun deleteForStudent(studentId: Long)
+
+    /** Open requests go back to the shared queue so any caseworker can pick them up. */
+    @Query("UPDATE help_requests SET caseworkerId = NULL WHERE caseworkerId = :caseworkerId AND status != 'RESOLVED'")
+    suspend fun releaseOpen(caseworkerId: Long)
 }
 
 @Dao
@@ -211,6 +230,9 @@ interface NoteDao {
 
     @Query("SELECT * FROM notes WHERE studentId = :studentId ORDER BY createdAt DESC")
     fun observeForStudent(studentId: Long): Flow<List<NoteEntity>>
+
+    @Query("DELETE FROM notes WHERE studentId = :studentId")
+    suspend fun deleteForStudent(studentId: Long)
 }
 
 @Dao
@@ -220,6 +242,12 @@ interface ActivityDao {
 
     @Query("SELECT * FROM activity WHERE caseworkerId = :caseworkerId AND at >= :since")
     fun observeSince(caseworkerId: Long, since: Long): Flow<List<ActivityEntity>>
+
+    @Query("DELETE FROM activity WHERE studentId = :studentId")
+    suspend fun deleteForStudent(studentId: Long)
+
+    @Query("DELETE FROM activity WHERE caseworkerId = :caseworkerId")
+    suspend fun deleteForCaseworker(caseworkerId: Long)
 }
 
 @Dao
@@ -232,4 +260,7 @@ interface MessageDao {
 
     @Query("SELECT m.* FROM messages m JOIN help_requests r ON r.id = m.requestId WHERE r.studentId = :studentId ORDER BY m.at, m.id")
     fun observeForStudent(studentId: Long): Flow<List<MessageEntity>>
+
+    @Query("DELETE FROM messages WHERE requestId IN (SELECT id FROM help_requests WHERE studentId = :studentId)")
+    suspend fun deleteForStudent(studentId: Long)
 }

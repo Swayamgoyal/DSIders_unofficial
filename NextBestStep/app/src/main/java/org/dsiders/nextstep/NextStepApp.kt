@@ -34,6 +34,7 @@ class AppContainer(app: Application) {
     init {
         appScope.launch {
             SeedData.seedIfEmpty(db)
+            repo.ensureAdmin(BuildConfig.ADMIN_PASSWORD.ifBlank { if (BuildConfig.DEBUG) SeedData.DEMO_PASSWORD else "" })
             _ready.value = true
         }
     }

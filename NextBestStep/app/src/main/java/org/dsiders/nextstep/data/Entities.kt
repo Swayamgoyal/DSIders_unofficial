@@ -5,7 +5,8 @@ import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
 
-enum class UserRole { STUDENT, CASEWORKER }
+/** There is exactly one ADMIN account, created at startup (see [Repository.ensureAdmin]). */
+enum class UserRole { STUDENT, CASEWORKER, ADMIN }
 
 /** Where a requirement stands for one student. */
 enum class ReqStatus { HAVE, PARTIAL, MISSING, UNKNOWN, LATER }

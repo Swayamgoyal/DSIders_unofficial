@@ -6,11 +6,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Assignment
 import androidx.compose.material.icons.automirrored.outlined.HelpOutline
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Work
+import androidx.compose.material.icons.outlined.Badge
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.Groups
@@ -51,6 +53,12 @@ import org.dsiders.nextstep.AppContainer
 import org.dsiders.nextstep.data.RequestStatus
 import org.dsiders.nextstep.data.UserEntity
 import org.dsiders.nextstep.data.UserRole
+import org.dsiders.nextstep.ui.admin.AddCaseworkerScreen
+import org.dsiders.nextstep.ui.admin.AdminCaseworkerScreen
+import org.dsiders.nextstep.ui.admin.AdminCaseworkersScreen
+import org.dsiders.nextstep.ui.admin.AdminProfileScreen
+import org.dsiders.nextstep.ui.admin.AdminStudentScreen
+import org.dsiders.nextstep.ui.admin.AdminStudentsScreen
 import org.dsiders.nextstep.ui.auth.LoginScreen
 import org.dsiders.nextstep.ui.auth.RegisterScreen
 import org.dsiders.nextstep.ui.caseworker.AddStudentScreen
@@ -109,6 +117,15 @@ object Routes {
     fun cStudent(sid: Long) = "c/student/$sid"
     fun cRole(rid: Long) = "c/role/$rid"
     fun cOpening(oid: Long) = "c/opening/$oid"
+
+    const val A_CASEWORKERS = "a/caseworkers"
+    const val A_STUDENTS = "a/students"
+    const val A_PROFILE = "a/profile"
+    const val A_ADD_CASEWORKER = "a/addcaseworker"
+    const val A_CASEWORKER = "a/caseworker/{cid}"
+    const val A_STUDENT = "a/student/{sid}"
+    fun aCaseworker(cid: Long) = "a/caseworker/$cid"
+    fun aStudent(sid: Long) = "a/student/$sid"
 }
 
 private data class Tab(val route: String, val label: String, val icon: ImageVector, val selectedIcon: ImageVector)
@@ -146,7 +163,8 @@ private fun AuthGraph(container: AppContainer, nav: NavHostController) {
 
 @Composable
 private fun RoleScaffold(container: AppContainer, nav: NavHostController, me: UserEntity) {
-    val isStudent = me.role == UserRole.STUDENT
+    val role = me.role
+    val isStudent = role == UserRole.STUDENT
     val meState = rememberUpdatedState(me)
     val backStack by nav.currentBackStackEntryAsState()
     val route = backStack?.destination?.route.orEmpty()
@@ -156,7 +174,11 @@ private fun RoleScaffold(container: AppContainer, nav: NavHostController, me: Us
     val roles by remember { container.repo.observeRoles() }.collectAsState(initial = emptyList())
     val toReview = roles.count { !it.reviewed }
 
-    val tabs = if (isStudent) listOf(
+    val tabs = if (role == UserRole.ADMIN) listOf(
+        Tab(Routes.A_CASEWORKERS, "Caseworkers", Icons.Outlined.Badge, Icons.Filled.Badge),
+        Tab(Routes.A_STUDENTS, "Students", Icons.Outlined.Groups, Icons.Filled.Groups),
+        Tab(Routes.A_PROFILE, "Profile", Icons.Outlined.Person, Icons.Filled.Person),
+    ) else if (isStudent) listOf(
         Tab(Routes.S_HOME, "Home", Icons.Outlined.Home, Icons.Filled.Home),
         Tab(Routes.path(me.id), "My path", Icons.Outlined.Flag, Icons.Filled.Flag),
         Tab(Routes.S_HELP, "Help", Icons.Outlined.ChatBubbleOutline, Icons.AutoMirrored.Outlined.HelpOutline),
@@ -168,7 +190,11 @@ private fun RoleScaffold(container: AppContainer, nav: NavHostController, me: Us
         Tab(Routes.C_PROFILE, "Profile", Icons.Outlined.Person, Icons.Filled.Person),
     )
 
-    val selected = if (isStudent) when {
+    val selected = if (role == UserRole.ADMIN) when {
+        route == Routes.A_STUDENTS || route.startsWith("a/student/") -> 1
+        route == Routes.A_PROFILE -> 2
+        else -> 0
+    } else if (isStudent) when {
         route.startsWith("flow/standing") || route.startsWith("flow/next") || route.startsWith("flow/path") || route.startsWith("flow/howto") -> 1
         route == Routes.S_HELP -> 2
         route == Routes.S_PROFILE -> 3
@@ -196,7 +222,7 @@ private fun RoleScaffold(container: AppContainer, nav: NavHostController, me: Us
                         },
                         icon = {
                             val badge = when {
-                                isStudent -> 0
+                                role != UserRole.CASEWORKER -> 0
                                 index == 1 -> newRequests
                                 index == 2 -> toReview
                                 else -> 0
@@ -221,13 +247,21 @@ private fun RoleScaffold(container: AppContainer, nav: NavHostController, me: Us
         Box(Modifier.padding(padding)) {
             // Built once per role. Screens read the latest profile through [meState], so editing a
             // profile never rebuilds the graph (which would reset the back stack).
-            val graph: NavGraphBuilder.() -> Unit = remember(isStudent) {
+            val graph: NavGraphBuilder.() -> Unit = remember(role) {
                 {
-                    flowGraph(container, nav, meState)
-                    if (isStudent) studentGraph(container, nav, meState) else caseworkerGraph(container, nav, meState)
+                    when (role) {
+                        UserRole.ADMIN -> adminGraph(container, nav, meState)
+                        UserRole.STUDENT -> { flowGraph(container, nav, meState); studentGraph(container, nav, meState) }
+                        UserRole.CASEWORKER -> { flowGraph(container, nav, meState); caseworkerGraph(container, nav, meState) }
+                    }
                 }
             }
-            NavHost(nav, startDestination = if (isStudent) Routes.S_HOME else Routes.C_STUDENTS, builder = graph)
+            val start = when (role) {
+                UserRole.ADMIN -> Routes.A_CASEWORKERS
+                UserRole.STUDENT -> Routes.S_HOME
+                UserRole.CASEWORKER -> Routes.C_STUDENTS
+            }
+            NavHost(nav, startDestination = start, builder = graph)
         }
     }
 }
@@ -344,5 +378,28 @@ private fun NavGraphBuilder.caseworkerGraph(container: AppContainer, nav: NavHos
     }
     composable(Routes.C_OPENING, listOf(navArgument("oid") { type = NavType.LongType })) { entry ->
         OpeningEditorScreen(container, meState.value, entry.arguments!!.getLong("oid"), onDone = { nav.popBackStack() })
+    }
+}
+
+private fun NavGraphBuilder.adminGraph(container: AppContainer, nav: NavHostController, meState: State<UserEntity>) {
+    composable(Routes.A_CASEWORKERS) {
+        AdminCaseworkersScreen(container, onCaseworker = { nav.navigate(Routes.aCaseworker(it)) }, onAdd = { nav.navigate(Routes.A_ADD_CASEWORKER) })
+    }
+    composable(Routes.A_STUDENTS) { AdminStudentsScreen(container, onStudent = { nav.navigate(Routes.aStudent(it)) }) }
+    composable(Routes.A_PROFILE) { AdminProfileScreen(container, meState.value) }
+    composable(Routes.A_ADD_CASEWORKER) {
+        AddCaseworkerScreen(container,
+            onCreated = { id -> nav.navigate(Routes.aCaseworker(id)) { popUpTo(Routes.A_ADD_CASEWORKER) { inclusive = true } } },
+            onBack = { nav.popBackStack() },
+        )
+    }
+    composable(Routes.A_CASEWORKER, listOf(navArgument("cid") { type = NavType.LongType })) { entry ->
+        AdminCaseworkerScreen(container, entry.arguments!!.getLong("cid"),
+            onStudent = { nav.navigate(Routes.aStudent(it)) },
+            onBack = { nav.popBackStack() },
+        )
+    }
+    composable(Routes.A_STUDENT, listOf(sid)) { entry ->
+        AdminStudentScreen(container, entry.arguments!!.getLong("sid"), onBack = { nav.popBackStack() })
     }
 }

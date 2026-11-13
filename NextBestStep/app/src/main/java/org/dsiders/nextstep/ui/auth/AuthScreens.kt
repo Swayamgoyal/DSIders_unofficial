@@ -5,8 +5,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,7 +29,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,7 +50,6 @@ import org.dsiders.nextstep.AppContainer
 import org.dsiders.nextstep.BuildConfig
 import org.dsiders.nextstep.data.SeedData
 import org.dsiders.nextstep.data.UserRole
-import org.dsiders.nextstep.ui.components.ChoiceChip
 import org.dsiders.nextstep.ui.components.FieldInput
 import org.dsiders.nextstep.ui.components.NsCard
 import org.dsiders.nextstep.ui.components.PrimaryButton
@@ -62,11 +58,12 @@ import org.dsiders.nextstep.ui.theme.Palette
 
 @Composable
 fun RoleSwitch(role: UserRole, onChange: (UserRole) -> Unit, modifier: Modifier = Modifier) {
+    val options = listOf(UserRole.STUDENT to "Student", UserRole.CASEWORKER to "Caseworker", UserRole.ADMIN to "Admin")
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Palette.Chip).padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        listOf(UserRole.STUDENT to "Student", UserRole.CASEWORKER to "Caseworker").forEach { (r, label) ->
+        options.forEach { (r, label) ->
             val selected = r == role
             Box(
                 Modifier.weight(1f).clip(RoundedCornerShape(10.dp))
@@ -152,7 +149,8 @@ fun LoginScreen(container: AppContainer, onCreateAccount: () -> Unit) {
                 Text("Sample accounts (debug builds only)", style = MaterialTheme.typography.titleSmall, color = Palette.Navy)
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    "Student: priya  ·  Caseworker: ravi\nPassword for both: ${SeedData.DEMO_PASSWORD}",
+                    if (BuildConfig.ADMIN_PASSWORD.isBlank()) "Student: priya  ·  Caseworker: ravi  ·  Admin: admin\nPassword for all: ${SeedData.DEMO_PASSWORD}"
+                    else "Student: priya  ·  Caseworker: ravi\nPassword for both: ${SeedData.DEMO_PASSWORD}\nAdmin: admin, with the password from local.properties",
                     style = MaterialTheme.typography.bodySmall, color = Palette.NavyMuted,
                 )
             }
@@ -166,20 +164,21 @@ fun LoginScreen(container: AppContainer, onCreateAccount: () -> Unit) {
             title = { Text("Forgot your password?") },
             text = {
                 Text(
-                    if (role == UserRole.STUDENT) "Ask your Barabari mentor at your centre. They can set a new password for you from your student page."
-                    else "Ask your centre lead to reset it, or create a new caseworker account.",
+                    when (role) {
+                        UserRole.STUDENT -> "Ask your Barabari mentor at your centre. They can set a new password for you from your student page."
+                        UserRole.CASEWORKER -> "Ask the Barabari admin. They can remove this account and create a new one for you."
+                        UserRole.ADMIN -> "The admin password is set in the app's build settings (ADMIN_PASSWORD in local.properties)."
+                    },
                 )
             },
         )
     }
 }
 
-/** Frame 0b: Create account. */
-@OptIn(ExperimentalLayoutApi::class)
+/** Frame 0b: Create account. Students only; caseworker accounts are made by the admin. */
 @Composable
 fun RegisterScreen(container: AppContainer, onBackToLogin: () -> Unit) {
     val scope = rememberCoroutineScope()
-    var role by rememberSaveable { mutableStateOf(UserRole.STUDENT) }
     var name by rememberSaveable { mutableStateOf("") }
     var username by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
@@ -188,10 +187,6 @@ fun RegisterScreen(container: AppContainer, onBackToLogin: () -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var showTerms by remember { mutableStateOf(false) }
-    val roles by remember { container.repo.observeRoles() }.collectAsState(initial = emptyList())
-    val fields = roles.filter { it.reviewed }.map { it.field.trim() }.filter { it.isNotEmpty() }.distinct()
-    var skills by remember { mutableStateOf(setOf<String>()) }
-    val isCaseworker = role == UserRole.CASEWORKER
 
     val problem = when {
         name.isBlank() || username.isBlank() -> null
@@ -200,8 +195,7 @@ fun RegisterScreen(container: AppContainer, onBackToLogin: () -> Unit) {
         confirm.isNotEmpty() && confirm != password -> "The two passwords don't match."
         else -> null
     }
-    val canSubmit = name.isNotBlank() && username.isNotBlank() && password.length >= 8 && confirm == password && agreed && problem == null &&
-        (!isCaseworker || skills.isNotEmpty() || fields.isEmpty())
+    val canSubmit = name.isNotBlank() && username.isNotBlank() && password.length >= 8 && confirm == password && agreed && problem == null
 
     Column(
         Modifier.fillMaxSize().statusBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 24.dp),
@@ -211,9 +205,7 @@ fun RegisterScreen(container: AppContainer, onBackToLogin: () -> Unit) {
         Spacer(Modifier.height(6.dp))
         Text("Takes about a minute. You can change any detail later.", style = MaterialTheme.typography.bodyLarge, color = Palette.TextMuted)
         Spacer(Modifier.height(20.dp))
-        Text("I am a", style = MaterialTheme.typography.titleSmall, color = Palette.Navy)
-        Spacer(Modifier.height(8.dp))
-        RoleSwitch(role, { role = it })
+        Text("Student account. Caseworker accounts are created by the Barabari admin.", style = MaterialTheme.typography.bodyMedium, color = Palette.TextMuted)
         Spacer(Modifier.height(16.dp))
         FieldInput(name, { name = it }, "Full name")
         Spacer(Modifier.height(12.dp))
@@ -222,15 +214,6 @@ fun RegisterScreen(container: AppContainer, onBackToLogin: () -> Unit) {
         PasswordField(password, { password = it }, "Password", supporting = "At least 8 characters")
         Spacer(Modifier.height(4.dp))
         PasswordField(confirm, { confirm = it }, "Confirm password")
-        if (isCaseworker && fields.isNotEmpty()) {
-            Spacer(Modifier.height(12.dp))
-            Text("Kinds of work you can mentor", style = MaterialTheme.typography.titleSmall, color = Palette.Navy)
-            Text("Students whose goal is in one of these are matched to you.", style = MaterialTheme.typography.bodySmall, color = Palette.TextMuted)
-            Spacer(Modifier.height(8.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                fields.forEach { f -> ChoiceChip(f, f in skills, { skills = if (f in skills) skills - f else skills + f }) }
-            }
-        }
         Spacer(Modifier.height(8.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Checkbox(agreed, { agreed = it }, colors = CheckboxDefaults.colors(checkedColor = Palette.Navy))
@@ -249,7 +232,7 @@ fun RegisterScreen(container: AppContainer, onBackToLogin: () -> Unit) {
             onClick = {
                 busy = true
                 scope.launch {
-                    container.repo.register(role, name, username, password, skills = if (isCaseworker) fields.filter { it in skills } else emptyList())
+                    container.repo.register(UserRole.STUDENT, name, username, password)
                         .onSuccess { container.session.signIn(it.id) }
                         .onFailure { error = it.message }
                     busy = false

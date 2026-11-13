@@ -13,6 +13,11 @@ OPENAI_MODEL=gpt-4.1-mini
 # Optional: change only if you route requests through your own proxy.
 OPENAI_BASE_URL=https://api.openai.com/v1
 
+# Password for the admin account (username: admin). The admin creates caseworker
+# accounts and can remove caseworkers and students. Rebuild after changing it.
+# Debug builds use the demo password (barabari123) if this is left out.
+ADMIN_PASSWORD=choose-a-strong-password
+
 # Using Groq (or another OpenAI-compatible provider) instead? Set all three.
 # LLM_* names work too (LLM_API_KEY, LLM_MODEL, LLM_BASE_URL).
 # OPENAI_API_KEY=gsk_...

@@ -27,7 +27,13 @@ The UI follows the Figma prototype in *Assignment 11, Final UI Design Document* 
    OPENAI_BASE_URL=https://api.groq.com/openai/v1
    ```
    (`LLM_API_KEY`, `LLM_MODEL` and `LLM_BASE_URL` are accepted as alternative names.)
-3. Run on a phone or emulator (Android 8.0 / API 26 or newer).
+3. Set the admin password in the same file:
+   ```properties
+   ADMIN_PASSWORD=choose-a-strong-password
+   ```
+   There is one admin account, username `admin`. It is created (or its password updated) when the app starts.
+   Debug builds use `barabari123` if this is left out; release builds without it have no admin account.
+4. Run on a phone or emulator (Android 8.0 / API 26 or newer).
 
 Without a key the app still works: it falls back to standard template questions and keyword matching.
 Caseworkers can check the connection under **Profile → ⚙ → Test connection**.
@@ -38,6 +44,7 @@ Caseworkers can check the connection under **Profile → ⚙ → Test connection
 |------|----------|----------|
 | Student | `priya` (also `sana`, `arjun`, `kiran`, `divya`, `mahesh`) | `barabari123` |
 | Caseworker | `ravi` (available), `lakshmi` (away) | `barabari123` |
+| Admin | `admin` | `ADMIN_PASSWORD` from `local.properties`, else `barabari123` |
 
 The sample roles, requirements, openings and students mirror the sample data in the Figma.
 **Barabari staff should review the roles under the Jobs tab before using the app with real students.**
@@ -50,7 +57,7 @@ The sample roles, requirements, openings and students mirror the sample data in 
 
 | Frame | Screen | Notes |
 |-------|--------|-------|
-| 0 / 0b | Log in / Create account | Student / Caseworker switch; password ≥ 8 characters; terms checkbox; caseworkers pick the kinds of work they mentor |
+| 0 / 0b | Log in / Create account | Student / Caseworker / Admin switch on log in; anyone can create a student account, only the admin creates caseworkers; password ≥ 8 characters; terms checkbox |
 | 1 | Goal entry | One sentence, starter chips taken from the NGO's roles, optional resume (PDF, photo or text) |
 | 2 | Reading it back | Shows what was understood while the first question is prepared |
 | 3 | First question | Kind of work (from the NGO's roles), "Something else" free text, "I don't know yet" |
@@ -72,6 +79,18 @@ The sample roles, requirements, openings and students mirror the sample data in 
 | — | Requests | All help requests, new first, with a badge on the tab |
 | — | Jobs | **Roles** (what a goal needs, as ordered steps with prerequisites) and **Openings** (real vacancies linked to a role). *Suggest steps* drafts a role's requirements with AI for the worker to review. |
 | — | Add a student | Caseworker-led intake: create the account and go straight into the questions together |
+
+---
+
+### Admin path (bottom bar: Caseworkers · Students · Profile)
+
+| Screen | Notes |
+|--------|-------|
+| Caseworkers | Every caseworker with centre, kinds of work, availability and student count; *Add a caseworker* (username, starting password, centre, languages, kinds of work) |
+| Caseworker detail | All their details and their students. **Remove caseworker**: their students are matched to a new mentor, open requests go back to the shared queue, notes and messages stay |
+| Students | Every student with goal and mentor |
+| Student detail | Profile, goal, what the app knows, request and note counts; change mentor. **Remove student** deletes the account and everything held about them |
+| Profile | Totals and sign out |
 
 ---
 

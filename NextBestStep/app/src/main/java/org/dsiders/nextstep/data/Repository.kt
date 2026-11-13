@@ -9,6 +9,10 @@ import org.json.JSONObject
 
 class Repository(val db: AppDatabase) {
 
+    companion object {
+        const val ADMIN_USERNAME = "admin"
+    }
+
     // ---- Accounts ---------------------------------------------------------------
 
     suspend fun login(username: String, password: String, role: UserRole): Result<UserEntity> {
@@ -16,7 +20,11 @@ class Repository(val db: AppDatabase) {
             ?: return Result.failure(IllegalArgumentException("No account with that username or ID."))
         if (!Passwords.matches(password, user)) return Result.failure(IllegalArgumentException("That password doesn't match."))
         if (user.role != role) {
-            val other = if (user.role == UserRole.STUDENT) "Student" else "Caseworker"
+            val other = when (user.role) {
+                UserRole.STUDENT -> "Student"
+                UserRole.CASEWORKER -> "Caseworker"
+                UserRole.ADMIN -> "Admin"
+            }
             return Result.failure(IllegalArgumentException("This is a $other account. Switch to $other above."))
         }
         return Result.success(user)
@@ -27,6 +35,8 @@ class Repository(val db: AppDatabase) {
         phone: String = "", college: String = "", course: String = "", year: String = "",
         district: String = "", addedBy: Long? = null, centre: String = "", skills: List<String> = emptyList(),
     ): Result<UserEntity> {
+        require(role != UserRole.ADMIN) { "The admin account is created at startup, not registered." }
+        if (username.trim().equals(ADMIN_USERNAME, true)) return Result.failure(IllegalArgumentException("That username is taken. Try another."))
         val salt = Passwords.newSalt()
         val user = UserEntity(
             role = role, fullName = fullName.trim(), username = username.trim(),
@@ -40,6 +50,50 @@ class Repository(val db: AppDatabase) {
         } catch (e: SQLiteConstraintException) {
             Result.failure(IllegalArgumentException("That username is taken. Try another."))
         }
+    }
+
+    /**
+     * Makes sure the single admin account exists and its password matches the build's.
+     * Does nothing when no password is configured, so release builds without one have no admin.
+     */
+    suspend fun ensureAdmin(password: String) {
+        if (password.isBlank()) return
+        val existing = db.users().byUsername(ADMIN_USERNAME)
+        if (existing != null && (existing.role != UserRole.ADMIN || Passwords.matches(password, existing))) return
+        val salt = Passwords.newSalt()
+        val hash = Passwords.hash(password, salt)
+        if (existing == null) {
+            db.users().insert(UserEntity(role = UserRole.ADMIN, fullName = "Barabari admin", username = ADMIN_USERNAME, passwordHash = hash, salt = salt))
+        } else {
+            db.users().update(existing.copy(passwordHash = hash, salt = salt))
+        }
+    }
+
+    /** Removes a student and everything held about them. */
+    suspend fun deleteStudent(studentId: Long) = db.withTransaction {
+        db.messages().deleteForStudent(studentId)
+        db.helpRequests().deleteForStudent(studentId)
+        db.notes().deleteForStudent(studentId)
+        db.activity().deleteForStudent(studentId)
+        db.facts().deleteForStudent(studentId)
+        db.reqStatus().clearForStudent(studentId)
+        db.questionLog().clearForStudent(studentId)
+        db.goals().deleteForStudent(studentId)
+        db.users().delete(studentId)
+    }
+
+    /**
+     * Removes a caseworker. Their open requests go back to the shared queue and each of
+     * their students is matched to a new mentor. Notes and past messages they wrote stay.
+     */
+    suspend fun deleteCaseworker(caseworkerId: Long) {
+        val students = db.withTransaction {
+            db.helpRequests().releaseOpen(caseworkerId)
+            db.activity().deleteForCaseworker(caseworkerId)
+            db.users().delete(caseworkerId)
+            db.users().studentsOf(caseworkerId).onEach { db.users().update(it.copy(mentorId = null)) }
+        }
+        students.forEach { assignMentor(it.id, db.goals().get(it.id)?.field.orEmpty()) }
     }
 
     suspend fun user(id: Long) = db.users().byId(id)
@@ -113,10 +167,9 @@ class Repository(val db: AppDatabase) {
      * student without one gets the least busy available mentor.
      */
     suspend fun assignMentor(studentId: Long, field: String) {
-        if (field.isBlank()) return
         val student = db.users().byId(studentId) ?: return
         val available = db.users().caseworkers().filter { it.available }
-        val matching = available.filter { cw -> cw.skillList().any { it.equals(field, true) } }
+        val matching = if (field.isBlank()) emptyList() else available.filter { cw -> cw.skillList().any { it.equals(field, true) } }
         if (matching.any { it.id == student.mentorId }) return
         val pool = matching.ifEmpty { if (student.mentorId != null) return else available }
         val load = pool.associate { it.id to db.users().studentCount(it.id) }
