@@ -38,6 +38,26 @@ The UI follows the Figma prototype in *Assignment 11, Final UI Design Document* 
 Without a key the app still works: it falls back to standard template questions and keyword matching.
 Caseworkers can check the connection under **Profile → ⚙ → Test connection**.
 
+### Building with Docker (no Android Studio needed)
+
+The Docker image contains JDK 17, the Android SDK and all Gradle dependencies, so the APK builds the same way on any machine with Docker.
+
+```bash
+cd NextBestStep
+cp .env.example .env          # optional: add OPENAI_API_KEY, ADMIN_PASSWORD, ...
+docker compose build          # first time only, roughly 5-10 minutes
+docker compose run --rm apk           # engine tests + debug APK   -> dist/app-debug.apk
+docker compose run --rm apk release   # engine tests + release APK -> dist/app-release.apk
+docker compose run --rm apk test      # tests only, report in dist/test-report/index.html
+```
+
+- Keys are read from `.env` when the container **runs**, not when the image is built, so they never end up inside the image. `.env` is git-ignored.
+- Install the APK on a phone or emulator with `adb install dist/app-debug.apk`, or copy it to the phone.
+- The app stores its data on the phone (Room / SQLite), so there is no server container. Docker covers the build and the tests.
+- On Apple Silicon Macs, the image runs under x86_64 emulation because Android's build tools ship only for x86_64, so builds are slower there.
+
+Without Compose: `docker build -t nextbeststep-builder .` then `docker run --rm --env-file .env -v "$PWD/dist:/dist" nextbeststep-builder debug`.
+
 ### Sample accounts (debug builds)
 
 | Role | Username | Password |

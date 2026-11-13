@@ -1,0 +1,24 @@
+# Build the Next Best Step APK without installing Android Studio or the SDK.
+#
+#   cp .env.example .env              # then fill in your key (optional)
+#   docker compose build
+#   docker compose run --rm apk           # tests + debug APK   -> ./dist
+#   docker compose run --rm apk release   # tests + release APK -> ./dist
+#   docker compose run --rm apk test      # tests only (report in ./dist/test-report)
+
+services:
+  apk:
+    build: .
+    image: nextbeststep-builder
+    platform: linux/amd64
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./dist:/dist
+      # Keeps Gradle's download cache between runs so rebuilds are fast.
+      - gradle-cache:/gradle-cache
+    command: ["debug"]
+
+volumes:
+  gradle-cache:

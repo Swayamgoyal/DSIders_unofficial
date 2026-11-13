@@ -1,0 +1,19 @@
+# Machine-specific or secret: never copy into the image.
+local.properties
+.env
+.env.*
+!.env.example
+
+# Build output and IDE state
+**/build/
+.gradle/
+.kotlin/
+.idea/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/
+dist/
+*.apk
+*.aab
+.DS_Store
